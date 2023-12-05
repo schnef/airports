@@ -44,7 +44,7 @@ init () =
       , tableState = Table.initialSort "Code"
       , airports = airportsList
       , selectedAirport = Nothing
-      , details = Components.Details.init
+      , details = Components.Details.init { airport = Nothing }
       }
     , Effect.none
     )
@@ -59,7 +59,7 @@ type Msg
     | SetTableState Table.State
     | Selected Airport
     | UpdateDetails Components.Details.Msg
-    | CloseDetails
+    | CloseDetails (Maybe Airport)
 
 
 update : Msg -> Model -> ( Model, Effect Msg )
@@ -76,7 +76,13 @@ update msg model =
             )
 
         Selected airport ->
-            ( { model | selectedAirport = Just airport }, Effect.none )
+            let
+                details =
+                    Components.Details.init { airport = Just airport }
+            in
+            ( { model | details = details, selectedAirport = Just airport }
+            , Effect.none
+            )
 
         UpdateDetails innerMsg ->
             Components.Details.update
@@ -85,7 +91,11 @@ update msg model =
                 , toModel = \details -> { model | details = details }
                 }
 
-        CloseDetails ->
+        CloseDetails airport ->
+            let
+                _ =
+                    Debug.log "Updated airport : " airport
+            in
             ( { model | selectedAirport = Nothing }, Effect.none )
 
 
@@ -113,7 +123,6 @@ view model =
                     { model = model.details
                     , toMsg = UpdateDetails
                     , onClose = CloseDetails
-                    , airport = airport
                     }
                     |> Components.Details.view
 

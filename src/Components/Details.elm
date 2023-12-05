@@ -19,23 +19,25 @@ import Html exposing (Html, div, text)
 import Html.Events exposing (onClick)
 
 
-
--- INIT
+type alias Airport =
+    { code : String
+    , name : String
+    , country : String
+    }
 
 
 type Details msg
     = Config
         { model : Model
         , toMsg : Msg -> msg
-        , onClose : msg
+        , onClose : Maybe Airport -> msg
         }
 
 
 new :
     { model : Model
     , toMsg : Msg -> msg
-    , onClose : msg
-    , airport : { code : String, name : String, country : String }
+    , onClose : Maybe Airport -> msg
     }
     -> Details msg
 new props =
@@ -48,19 +50,30 @@ new props =
 
 type Model
     = CompModel
-        { code : Maybe String
-        , name : String
-        , country : String
+        { modalVisibility : Modal.Visibility
+        , airport : Maybe Airport
         }
 
 
-init : Model
-init =
-    CompModel
-        { code = Nothing
-        , name = ""
-        , country = ""
-        }
+init : { airport : Maybe Airport } -> Model
+init { airport } =
+    case airport of
+        Just { code, name, country } ->
+            CompModel
+                { modalVisibility = Modal.shown
+                , airport =
+                    Just
+                        { code = code
+                        , name = name
+                        , country = country
+                        }
+                }
+
+        Nothing ->
+            CompModel
+                { modalVisibility = Modal.hidden
+                , airport = Nothing
+                }
 
 
 
@@ -69,6 +82,7 @@ init =
 
 type Msg
     = UserUpdatedInput Field String
+    | AnimateModal Modal.Visibility
 
 
 type Field
@@ -94,78 +108,89 @@ update props =
             )
     in
     toParentModel <|
-        case props.msg of
-            UserUpdatedInput Name value ->
-                ( CompModel { model | name = value }
+        case ( props.msg, model.airport ) of
+            ( UserUpdatedInput Name value, Just airport ) ->
+                ( CompModel { model | airport = Just { airport | name = value } }
                 , Effect.none
                 )
 
-            UserUpdatedInput Country value ->
-                ( CompModel { model | country = value }
+            ( UserUpdatedInput Country value, Just airport ) ->
+                ( CompModel { model | airport = Just { airport | country = value } }
                 , Effect.none
                 )
 
+            ( AnimateModal visibility, _ ) ->
+                ( CompModel { model | modalVisibility = visibility }
+                , Effect.none
+                )
 
-subscriptions : Model -> Sub msg
-subscriptions model =
-    Sub.none
+            _ ->
+                ( CompModel model, Effect.none )
+
+
+subscriptions : Model -> Sub Msg
+subscriptions (CompModel model) =
+    Sub.batch
+        [ Modal.subscriptions model.modalVisibility AnimateModal ]
 
 
 
+-- subscriptions : Model -> Sub msg
+-- subscriptions model =
+--     Sub.none
 -- VIEW
 
 
 view : Details msg -> Html msg
 view (Config config) =
-    Modal.config config.onClose
-        |> Modal.small
-        |> Modal.h5 [] [ text "Edit airport" ]
-        |> Modal.large
-        |> Modal.hideOnBackdropClick False
-        |> Modal.body [] [ Form.form [] [ viewForm config ] ]
-        |> Modal.footer [] (viewButtons config)
-        |> Modal.view Modal.shown
+    let
+        (CompModel model) =
+            config.model
+    in
+    case model.airport of
+        Just airport ->
+            Modal.config (config.onClose Nothing)
+                |> Modal.small
+                |> Modal.h5 [] [ text "Edit airport" ]
+                |> Modal.large
+                |> Modal.hideOnBackdropClick False
+                |> Modal.body [] [ Form.form [] [ viewForm config.toMsg airport ] ]
+                |> Modal.footer [] (viewButtons config.onClose airport)
+                |> Modal.view model.modalVisibility
+
+        -- Modal.shown
+        Nothing ->
+            div [] []
 
 
-viewButtons config =
+viewButtons onClose airport =
     [ Button.button
         [ Button.outlinePrimary
-        , Button.attrs [ onClick config.onClose ]
+        , Button.attrs [ onClick (onClose Nothing) ]
         ]
         [ text "Cancel" ]
     , Button.button
         [ Button.primary
-        , Button.attrs [ onClick config.onClose ]
+        , Button.attrs [ onClick (onClose (Just airport)) ]
         ]
         [ text "Save" ]
     ]
 
 
-viewForm config =
+viewForm toMsg airport =
     let
-        (CompModel model) =
-            config.model
-
         onUpdateName s =
-            config.toMsg (UserUpdatedInput Name s)
+            toMsg (UserUpdatedInput Name s)
 
         onUpdateCountry s =
-            config.toMsg (UserUpdatedInput Country s)
-
-        code =
-            case model.code of
-                Just s ->
-                    s
-
-                Nothing ->
-                    "<nothing>"
+            toMsg (UserUpdatedInput Country s)
     in
     Form.form []
         [ Form.row []
             [ Form.col []
                 [ Form.label [] [ text "Code" ]
                 , Input.text
-                    [ Input.value code -- "08FE037A-DC44-4496-8543-90CA22EB414D"
+                    [ Input.value airport.code -- "08FE037A-DC44-4496-8543-90CA22EB414D"
                     , Input.readonly True
                     ]
                 ]
@@ -175,7 +200,7 @@ viewForm config =
                 [ Form.label [] [ text "Name" ]
                 , Input.text
                     [ Input.placeholder "short_name"
-                    , Input.value model.name
+                    , Input.value airport.name
                     , Input.onInput onUpdateName
                     ]
                 ]
@@ -185,7 +210,7 @@ viewForm config =
                 [ Form.label [] [ text "Country" ]
                 , Textarea.textarea
                     [ Textarea.rows 4
-                    , Textarea.value model.country
+                    , Textarea.value airport.country
                     , Textarea.onInput onUpdateCountry
                     ]
                 ]
