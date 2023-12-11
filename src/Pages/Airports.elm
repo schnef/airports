@@ -1,13 +1,19 @@
 module Pages.Airports exposing (Model, Msg, page)
 
+import Airport exposing (Airport)
+import Api
+import Api.AirportsList
 import Bootstrap.Button as Button
 import Bootstrap.Card as Card
 import Bootstrap.Card.Block as Block
+import Bootstrap.Spinner as Spinner
+import Bootstrap.Text as Text
 import Components.Details
 import Effect exposing (Effect)
 import Html exposing (Attribute, Html, div, input, text)
 import Html.Attributes exposing (class, placeholder, type_)
 import Html.Events exposing (onClick, onInput)
+import Http
 import Page exposing (Page)
 import Route exposing (Route)
 import Shared
@@ -32,7 +38,7 @@ page shared route =
 type alias Model =
     { query : String
     , tableState : Table.State
-    , airports : List Airport
+    , airports : Api.Data (List Airport)
     , selectedAirport : Maybe Airport
     , details : Components.Details.Model
     }
@@ -42,11 +48,11 @@ init : () -> ( Model, Effect Msg )
 init () =
     ( { query = ""
       , tableState = Table.initialSort "Code"
-      , airports = airportsList
+      , airports = Api.Loading
       , selectedAirport = Nothing
       , details = Components.Details.init { airport = Nothing }
       }
-    , Effect.none
+    , Effect.sendCmd (Api.AirportsList.getAll { onResponse = AirportsApiResponded })
     )
 
 
@@ -60,11 +66,22 @@ type Msg
     | Selected Airport
     | UpdateDetails Components.Details.Msg
     | CloseDetails (Maybe Airport)
+    | AirportsApiResponded (Result Http.Error (List Airport))
 
 
 update : Msg -> Model -> ( Model, Effect Msg )
 update msg model =
     case msg of
+        AirportsApiResponded (Ok httpError) ->
+            ( { model | airports = Api.Success httpError }
+            , Effect.none
+            )
+
+        AirportsApiResponded (Err httpError) ->
+            ( { model | airports = Api.Failure httpError }
+            , Effect.none
+            )
+
         SetQuery newQuery ->
             ( { model | query = newQuery }
             , Effect.none
@@ -116,19 +133,32 @@ view : Model -> View Msg
 view model =
     { title = "Pages.Airports"
     , body =
-        [ viewCard model
-        , case model.selectedAirport of
-            Just airport ->
-                Components.Details.new
-                    { model = model.details
-                    , toMsg = UpdateDetails
-                    , onClose = CloseDetails
-                    }
-                    |> Components.Details.view
+        case model.airports of
+            Api.Loading ->
+                [ Spinner.spinner
+                    [ Spinner.large
+                    , Spinner.color Text.secondary
+                    ]
+                    [ Spinner.srMessage "Loading..." ]
+                ]
 
-            Nothing ->
-                div [] []
-        ]
+            Api.Failure httpError ->
+                [ div [] [ text (Api.toUserFriendlyMessage httpError) ] ]
+
+            Api.Success airports ->
+                [ viewCard model
+                , case model.selectedAirport of
+                    Just airport ->
+                        Components.Details.new
+                            { model = model.details
+                            , toMsg = UpdateDetails
+                            , onClose = CloseDetails
+                            }
+                            |> Components.Details.view
+
+                    Nothing ->
+                        div [] []
+                ]
     }
 
 
@@ -143,8 +173,16 @@ viewCard model =
 
 
 viewTable : Model -> Html Msg
-viewTable { airports, tableState, query } =
+viewTable ({ tableState, query } as model) =
     let
+        airports =
+            case model.airports of
+                Api.Success xs ->
+                    xs
+
+                _ ->
+                    []
+
         lowerQuery =
             String.toLower query
 
@@ -195,11 +233,12 @@ viewEdit airport =
         ]
 
 
-type alias Airport =
-    { code : String
-    , name : String
-    , country : String
-    }
+
+-- type alias Airport =
+--     { code : String
+--     , name : String
+--     , country : String
+--     }
 
 
 airportsList =
