@@ -8,22 +8,16 @@ module Components.Details exposing
     , view
     )
 
+import Airport exposing (Airport)
 import Bootstrap.Button as Button
 import Bootstrap.Form as Form
 import Bootstrap.Form.Input as Input
-import Bootstrap.Form.Radio as Radio
 import Bootstrap.Form.Textarea as Textarea
 import Bootstrap.Modal as Modal
 import Effect exposing (Effect)
 import Html exposing (Html, div, text)
 import Html.Events exposing (onClick)
-
-
-type alias Airport =
-    { code : String
-    , name : String
-    , country : String
-    }
+import Http
 
 
 type Details msg
@@ -135,9 +129,6 @@ subscriptions (CompModel model) =
 
 
 
--- subscriptions : Model -> Sub msg
--- subscriptions model =
---     Sub.none
 -- VIEW
 
 

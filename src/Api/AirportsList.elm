@@ -1,8 +1,16 @@
-module Api.AirportsList exposing (getAll)
+module Api.AirportsList exposing (get, getAll)
 
 import Airport exposing (Airport)
 import Http
 import Json.Decode
+
+
+get : { code : String, onResponse : Result Http.Error Airport -> msg } -> Cmd msg
+get options =
+    Http.get
+        { url = "http://localhost:8080/airport/" ++ options.code
+        , expect = Http.expectJson options.onResponse airportDecoder
+        }
 
 
 getAll : { onResponse : Result Http.Error (List Airport) -> msg } -> Cmd msg
