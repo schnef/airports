@@ -1,8 +1,37 @@
-module Api.AirportsList exposing (get, getAll)
+module Api.AirportsList exposing (get, getAll, put)
 
 import Airport exposing (Airport)
 import Http
-import Json.Decode
+import Json.Decode as Decode
+import Json.Encode as Encode
+
+
+put : { airport : Airport, onResponse : Result Http.Error () -> msg } -> Cmd msg
+put options =
+    let
+        { code, name, country } =
+            options.airport
+
+        url =
+            Debug.log "url" ("http://localhost:8080/airport/" ++ code)
+
+        body =
+            Http.jsonBody <|
+                Encode.object
+                    [ ( "code", Encode.string code )
+                    , ( "name", Encode.string name )
+                    , ( "country", Encode.string country )
+                    ]
+    in
+    Http.request
+        { method = "PUT"
+        , headers = []
+        , url = url
+        , body = body
+        , expect = Http.expectWhatever options.onResponse
+        , timeout = Nothing
+        , tracker = Nothing
+        }
 
 
 get : { code : String, onResponse : Result Http.Error Airport -> msg } -> Cmd msg
@@ -21,31 +50,31 @@ getAll options =
         }
 
 
-airportsDecoder : Json.Decode.Decoder (List Airport)
+airportsDecoder : Decode.Decoder (List Airport)
 airportsDecoder =
-    Json.Decode.field "airports" (Json.Decode.list airportDecoder)
+    Decode.field "airports" (Decode.list airportDecoder)
 
 
-airportDecoder : Json.Decode.Decoder Airport
+airportDecoder : Decode.Decoder Airport
 airportDecoder =
-    Json.Decode.field "airport"
-        (Json.Decode.map3 Airport
+    Decode.field "airport"
+        (Decode.map3 Airport
             codeFieldDecoder
             nameFieldDecoder
             countryFieldDecoder
         )
 
 
-codeFieldDecoder : Json.Decode.Decoder String
+codeFieldDecoder : Decode.Decoder String
 codeFieldDecoder =
-    Json.Decode.field "code" Json.Decode.string
+    Decode.field "code" Decode.string
 
 
-nameFieldDecoder : Json.Decode.Decoder String
+nameFieldDecoder : Decode.Decoder String
 nameFieldDecoder =
-    Json.Decode.field "name" Json.Decode.string
+    Decode.field "name" Decode.string
 
 
-countryFieldDecoder : Json.Decode.Decoder String
+countryFieldDecoder : Decode.Decoder String
 countryFieldDecoder =
-    Json.Decode.field "country" Json.Decode.string
+    Decode.field "country" Decode.string

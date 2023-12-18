@@ -14,6 +14,7 @@ import Html exposing (Attribute, Html, div, input, text)
 import Html.Attributes exposing (class, placeholder, type_)
 import Html.Events exposing (onClick, onInput)
 import Http
+import List exposing (head, reverse, tail)
 import Page exposing (Page)
 import Route exposing (Route)
 import Shared
@@ -66,7 +67,9 @@ type Msg
     | Selected Airport
     | UpdateDetails Components.Details.Msg
     | CloseDetails (Maybe Airport)
+    | AirportApiResponded (Result Http.Error Airport)
     | AirportsApiResponded (Result Http.Error (List Airport))
+    | Uploaded (Result Http.Error ())
 
 
 update : Msg -> Model -> ( Model, Effect Msg )
@@ -78,6 +81,20 @@ update msg model =
             )
 
         AirportsApiResponded (Err httpError) ->
+            ( { model | airports = Api.Failure httpError }
+            , Effect.none
+            )
+
+        AirportApiResponded (Ok selectedAirport) ->
+            let
+                details =
+                    Components.Details.init { airport = Just selectedAirport }
+            in
+            ( { model | details = details, selectedAirport = Just selectedAirport }
+            , Effect.none
+            )
+
+        AirportApiResponded (Err httpError) ->
             ( { model | airports = Api.Failure httpError }
             , Effect.none
             )
@@ -94,11 +111,11 @@ update msg model =
 
         Selected airport ->
             let
-                details =
-                    Components.Details.init { airport = Just airport }
+                code =
+                    airport.code
             in
-            ( { model | details = details, selectedAirport = Just airport }
-            , Effect.none
+            ( model
+            , Effect.sendCmd (Api.AirportsList.get { code = code, onResponse = AirportApiResponded })
             )
 
         UpdateDetails innerMsg ->
@@ -108,12 +125,42 @@ update msg model =
                 , toModel = \details -> { model | details = details }
                 }
 
-        CloseDetails airport ->
-            let
-                _ =
-                    Debug.log "Updated airport : " airport
-            in
+        CloseDetails Nothing ->
             ( { model | selectedAirport = Nothing }, Effect.none )
+
+        CloseDetails ((Just airport) as updatedAirport) ->
+            ( { model | selectedAirport = updatedAirport }
+            , case model.selectedAirport == updatedAirport of
+                False ->
+                    Effect.sendCmd
+                        (Api.AirportsList.put
+                            { airport = airport
+                            , onResponse = Uploaded
+                            }
+                        )
+
+                True ->
+                    Effect.none
+            )
+
+        Uploaded (Ok _) ->
+            let
+                updatedAirports =
+                    case ( model.airports, model.selectedAirport ) of
+                        ( Api.Success airports, Just selectedAirport ) ->
+                            Api.Success (keyReplace selectedAirport airports)
+
+                        _ ->
+                            model.airports
+            in
+            ( { model | airports = updatedAirports, selectedAirport = Nothing }
+            , Effect.none
+            )
+
+        Uploaded (Err httpError) ->
+            ( { model | airports = Api.Failure httpError, selectedAirport = Nothing }
+            , Effect.none
+            )
 
 
 
@@ -231,3 +278,43 @@ viewEdit airport =
             [ Button.small, Button.outlinePrimary, Button.onClick (Selected airport) ]
             [ text "Edit " ]
         ]
+
+
+keyFind : String -> List Airport -> Maybe Airport
+keyFind code list =
+    keyFind_ code list []
+
+
+keyFind_ : String -> List Airport -> List Airport -> Maybe Airport
+keyFind_ code list acc =
+    case list of
+        h :: t ->
+            case h.code == code of
+                True ->
+                    Just h
+
+                False ->
+                    keyFind_ code t (h :: acc)
+
+        [] ->
+            Nothing
+
+
+keyReplace : Airport -> List Airport -> List Airport
+keyReplace airport list =
+    keyReplace_ airport list []
+
+
+keyReplace_ : Airport -> List Airport -> List Airport -> List Airport
+keyReplace_ ({ code } as airport) list acc =
+    case list of
+        h :: t ->
+            case h.code == code of
+                True ->
+                    reverse (airport :: acc) ++ t
+
+                False ->
+                    keyReplace_ airport t (h :: acc)
+
+        [] ->
+            reverse acc
