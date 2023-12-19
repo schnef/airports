@@ -3,6 +3,7 @@ module Pages.Airports exposing (Model, Msg, page)
 import Airport exposing (Airport)
 import Api
 import Api.AirportsList
+import Bootstrap.Alert as Alert
 import Bootstrap.Button as Button
 import Bootstrap.Card as Card
 import Bootstrap.Card.Block as Block
@@ -10,8 +11,8 @@ import Bootstrap.Spinner as Spinner
 import Bootstrap.Text as Text
 import Components.Details
 import Effect exposing (Effect)
-import Html exposing (Attribute, Html, div, input, text)
-import Html.Attributes exposing (class, placeholder, type_)
+import Html exposing (Attribute, Html, div, input, p, text)
+import Html.Attributes exposing (class, href, placeholder, type_)
 import Html.Events exposing (onClick, onInput)
 import Http
 import List exposing (head, reverse, tail)
@@ -129,19 +130,21 @@ update msg model =
             ( { model | selectedAirport = Nothing }, Effect.none )
 
         CloseDetails ((Just airport) as updatedAirport) ->
-            ( { model | selectedAirport = updatedAirport }
-            , case model.selectedAirport == updatedAirport of
+            case model.selectedAirport == updatedAirport of
+                True ->
+                    ( { model | selectedAirport = Nothing }
+                    , Effect.none
+                    )
+
                 False ->
-                    Effect.sendCmd
+                    ( { model | selectedAirport = updatedAirport }
+                    , Effect.sendCmd
                         (Api.AirportsList.put
                             { airport = airport
                             , onResponse = Uploaded
                             }
                         )
-
-                True ->
-                    Effect.none
-            )
+                    )
 
         Uploaded (Ok _) ->
             let
@@ -182,15 +185,23 @@ view model =
     , body =
         case model.airports of
             Api.Loading ->
-                [ Spinner.spinner
-                    [ Spinner.large
-                    , Spinner.color Text.secondary
+                [ div [ class "d-flex justify-content-center" ]
+                    [ Spinner.spinner
+                        [ Spinner.large
+                        , Spinner.color Text.secondary
+                        ]
+                        [ Spinner.srMessage "Loading..." ]
                     ]
-                    [ Spinner.srMessage "Loading..." ]
                 ]
 
             Api.Failure httpError ->
-                [ div [] [ text (Api.toUserFriendlyMessage httpError) ] ]
+                -- [ div [] [ text (Api.toUserFriendlyMessage httpError) ] ]
+                [ Alert.simpleDanger []
+                    [ Alert.h1 [] [ text "An error occured" ]
+                    , p [] [ text (Api.toUserFriendlyMessage httpError) ]
+                    , Alert.link [ href "#" ] [ text "Reload" ]
+                    ]
+                ]
 
             Api.Success airports ->
                 [ viewCard model
@@ -278,26 +289,6 @@ viewEdit airport =
             [ Button.small, Button.outlinePrimary, Button.onClick (Selected airport) ]
             [ text "Edit " ]
         ]
-
-
-keyFind : String -> List Airport -> Maybe Airport
-keyFind code list =
-    keyFind_ code list []
-
-
-keyFind_ : String -> List Airport -> List Airport -> Maybe Airport
-keyFind_ code list acc =
-    case list of
-        h :: t ->
-            case h.code == code of
-                True ->
-                    Just h
-
-                False ->
-                    keyFind_ code t (h :: acc)
-
-        [] ->
-            Nothing
 
 
 keyReplace : Airport -> List Airport -> List Airport
